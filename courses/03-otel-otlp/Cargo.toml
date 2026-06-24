@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = [
+    "lesson-01-otel-init",
+    "lesson-02-otel-logs",
+    "lesson-03-otel-metrics",
+    "lesson-04-otel-traces",
+    "lesson-05-collector-pipeline",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"

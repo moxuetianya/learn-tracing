@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "lesson-01-tracing-subscriber",
+    "lesson-02-span",
+    "lesson-03-metrics",
+    "lesson-04-traces",
+    "lesson-05-integration",
+]
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
