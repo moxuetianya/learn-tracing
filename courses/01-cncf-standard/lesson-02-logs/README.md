@@ -64,15 +64,15 @@ fn init_logs() {
                 .with_service_name("learn-tracing-cncf")
                 .build(),
         )
-        .with_simple_exporter(log_exporter)
+        .with_batch_exporter(log_exporter)
         .build();
 ```
 
 - `Resource::builder().with_service_name("learn-tracing-cncf")` — 将服务名写入所有日志条目的 `resource` 字段，下游可按服务名筛选
-- `.with_simple_exporter(log_exporter)` — 使用 **简单导出器**（每条日志立即发送，不批处理）
+- `.with_batch_exporter(log_exporter)` — 使用 **批量导出器**（日志在后台异步批量发送，不阻塞业务请求）
 - `SdkLoggerProvider` 是整个日志管线的顶层入口
 
-> **注意：** `with_simple_exporter` 适合开发和低流量场景。生产环境应用 `with_batch_exporter` 实现批量导出以降低网络开销。
+> **为什么用 `with_batch_exporter`？** `with_simple_exporter` 在 tokio 异步上下文中每次导出同步阻塞，若 Collector 未启动或响应慢，会导致整个 HTTP handler 卡死。`with_batch_exporter` 在后台异步批量发送，Collector 不可用时静默丢弃日志，不影响业务请求。
 
 ### 3. 桥接层
 
@@ -207,7 +207,7 @@ Resource:
 
 - **`with_tonic()` 的作用？** 指定 gRPC 传输。OTLP 协议支持 gRPC（端口 4317）和 HTTP（端口 4318）两种方式。`with_tonic()` 走 gRPC。
 
-- **为什么用 `with_simple_exporter` 而不是 `with_batch_exporter`？** 本课是教学示例，简单导出器确保每条日志立刻发送，便于调试观察。生产环境应该用 batch exporter 减少网络往返。
+- **为什么用 `with_batch_exporter` 而不是 `with_simple_exporter`？** `with_simple_exporter` 在 tokio 异步上下文中每次导出同步阻塞 gRPC 调用，若 Collector 未启动或响应超时，会直接卡死整个 HTTP handler。`with_batch_exporter` 在后台异步批量发送，Collector 不可用时静默丢弃日志，完全不影响业务请求。生产环境也必须使用 batch exporter 以减少网络往返。
 
 - **`EnvFilter::new("info")` 如何覆盖？** 在运行命令前设置环境变量：
   ```bash
