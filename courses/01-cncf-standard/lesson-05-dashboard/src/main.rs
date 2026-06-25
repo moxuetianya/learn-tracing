@@ -123,6 +123,8 @@ async fn main() {
         request_duration: meter
             .f64_histogram("http.request.duration")
             .with_description("HTTP request duration in seconds")
+            .with_unit("s")
+            .with_boundaries(vec![0.005, 0.01, 0.015, 0.02, 0.025, 0.03, 0.04, 0.05, 0.075, 0.1, 0.25, 0.5])
             .build(),
     });
 
