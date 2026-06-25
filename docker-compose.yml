@@ -4,6 +4,9 @@ services:
     image: docker.io/otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
     command: ["--config=/etc/otel-collector-config.yaml"]
+    environment:
+      - no_proxy=jaeger,prometheus,grafana,localhost,127.0.0.1,::1
+      - NO_PROXY=jaeger,prometheus,grafana,localhost,127.0.0.1,::1
     volumes:
       - ./configs/otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:

@@ -49,7 +49,7 @@ fn init_logs() {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().json())
-        .with(tracing_subscriber::EnvFilter::new("info"))
+        .with(tracing_subscriber::EnvFilter::new("warn"))
         .with(otel_layer)
         .init();
 }
