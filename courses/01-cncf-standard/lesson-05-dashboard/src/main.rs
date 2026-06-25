@@ -57,7 +57,7 @@ fn init_observability() -> SdkTracerProvider {
                 .with_service_name("learn-tracing-cncf")
                 .build(),
         )
-        .with_simple_exporter(log_exporter)
+        .with_batch_exporter(log_exporter)
         .build();
 
     let otel_log_layer =

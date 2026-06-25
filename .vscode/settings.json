@@ -1,0 +1,5 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "courses/01-cncf-standard/Cargo.toml"
+    ]
+}
