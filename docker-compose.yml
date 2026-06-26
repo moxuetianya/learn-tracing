@@ -49,7 +49,6 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     volumes:
       - ./configs/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
-      - ./configs/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml
       - ./configs/dashboards:/etc/grafana/provisioning/dashboards
     ports:
       - "3000:3000"
