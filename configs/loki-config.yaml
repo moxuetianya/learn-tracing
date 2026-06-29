@@ -24,6 +24,13 @@ schema_config:
         prefix: index_
         period: 24h
 
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: inmemory
+      replication_factor: 1
+
 compactor:
   working_directory: /loki/compactor
 
