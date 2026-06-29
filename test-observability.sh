@@ -20,6 +20,10 @@ check() {
     fi
 }
 
+TMPDIR="${TMPDIR:-/tmp}"
+TMPF="$TMPDIR/test-observability.tmp"
+trap 'rm -f "$TMPF" 2>/dev/null' EXIT
+
 PROJECT_DIR="/home/peter/project/learn-tracing"
 APP_DIR="$PROJECT_DIR/courses/01-cncf-standard"
 
@@ -35,13 +39,19 @@ podman-compose down 2>/dev/null || true
 podman-compose up -d 2>&1
 sleep 8
 
-check "otel-collector running"      podman ps --filter "name=otel-collector" --filter "status=running" --format "{{.Names}}" | rg -q otel-collector
-check "jaeger running"              podman ps --filter "name=jaeger" --filter "status=running" --format "{{.Names}}" | rg -q jaeger
-check "prometheus running"          podman ps --filter "name=prometheus" --filter "status=running" --format "{{.Names}}" | rg -q prometheus
-check "loki running"                podman ps --filter "name=loki" --filter "status=running" --format "{{.Names}}" | rg -q loki
-check "grafana running"             podman ps --filter "name=grafana" --filter "status=running" --format "{{.Names}}" | rg -q grafana
+podman ps --filter "name=otel-collector" --filter "status=running" --format "{{.Names}}" > "$TMPF"
+check "otel-collector running"      rg -q otel-collector "$TMPF"
+podman ps --filter "name=jaeger" --filter "status=running" --format "{{.Names}}" > "$TMPF"
+check "jaeger running"              rg -q jaeger "$TMPF"
+podman ps --filter "name=prometheus" --filter "status=running" --format "{{.Names}}" > "$TMPF"
+check "prometheus running"          rg -q prometheus "$TMPF"
+podman ps --filter "name=loki" --filter "status=running" --format "{{.Names}}" > "$TMPF"
+check "loki running"                rg -q loki "$TMPF"
+podman ps --filter "name=grafana" --filter "status=running" --format "{{.Names}}" > "$TMPF"
+check "grafana running"             rg -q grafana "$TMPF"
 
-check "collector no error in logs"  podman logs otel-collector 2>&1 | tail -3 | rg -v "error|Error|ERROR|Fatal|panic"
+podman logs otel-collector 2>&1 | tail -3 > "$TMPF"
+check "collector no error in logs"  rg -v "error|Error|ERROR|Fatal|panic" "$TMPF"
 
 echo ""
 echo "── Phase 2: Build and start app ──"
@@ -56,7 +66,12 @@ nohup cargo run -p lesson-05-dashboard > /tmp/lesson05.log 2>&1 &
 APP_PID=$!
 sleep 3
 
-check "app health endpoint"         curl -sf http://127.0.0.1:3001/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok'"
+curl -sf http://127.0.0.1:3001/health > "$TMPF"
+check "app health endpoint"         python3 -c "
+import sys,json
+with open('$TMPF') as f: d=json.load(f)
+assert d['status']=='ok'
+"
 
 echo ""
 echo "── Phase 3: Generate load ──"
@@ -76,12 +91,14 @@ echo ""
 echo "── Phase 4: Verify metrics pipeline ──"
 
 # Check collector metrics endpoint
-check "collector exports metrics"   curl -s http://localhost:8889/metrics | rg -q "http_requests_total"
+curl -s http://localhost:8889/metrics > "$TMPF"
+check "collector exports metrics"   rg -q "http_requests_total" "$TMPF"
 
 # Check Prometheus target health
-check "prometheus target UP"        curl -s 'http://localhost:9091/api/v1/targets' | python3 -c "
+curl -s 'http://localhost:9091/api/v1/targets' > "$TMPF"
+check "prometheus target UP"        python3 -c "
 import sys,json
-d=json.load(sys.stdin)
+with open('$TMPF') as f: d=json.load(f)
 targets=d['data']['activeTargets']
 assert len(targets)>0,'no targets'
 t=targets[0]
@@ -89,9 +106,10 @@ assert t['health']=='up',f'health={t[\"health\"]}'
 "
 
 # Check Prometheus has metrics
-check "prometheus has http_requests_total"  curl -s 'http://localhost:9091/api/v1/query?query=http_requests_total' | python3 -c "
+curl -s 'http://localhost:9091/api/v1/query?query=http_requests_total' > "$TMPF"
+check "prometheus has http_requests_total"  python3 -c "
 import sys,json
-d=json.load(sys.stdin)
+with open('$TMPF') as f: d=json.load(f)
 assert d['status']=='success'
 assert len(d['data']['result'])>0,'no results'
 for r in d['data']['result']:
@@ -101,21 +119,24 @@ for r in d['data']['result']:
 "
 
 # Check Prometheus has histogram
-check "prometheus has duration histogram"  curl -s 'http://localhost:9091/api/v1/query?query=http_request_duration_seconds_bucket' | python3 -c "
+curl -s 'http://localhost:9091/api/v1/query?query=http_request_duration_seconds_bucket' > "$TMPF"
+check "prometheus has duration histogram"  python3 -c "
 import sys,json
-d=json.load(sys.stdin)
+with open('$TMPF') as f: d=json.load(f)
 assert d['status']=='success'
 assert len(d['data']['result'])>0,'no results'
 "
 
 # Check metric name has _seconds suffix
-check "duration metric has _seconds suffix"  curl -s http://localhost:8889/metrics | rg -q "http_request_duration_seconds_bucket"
+curl -s http://localhost:8889/metrics > "$TMPF"
+check "duration metric has _seconds suffix"  rg -q "http_request_duration_seconds_bucket" "$TMPF"
 
 echo ""
 echo "── Phase 5: Verify traces (Jaeger) ──"
-check "jaeger has traces"           curl -s 'http://localhost:16686/api/traces?service=learn-tracing-cncf&limit=1' | python3 -c "
+curl -s 'http://localhost:16686/api/traces?service=learn-tracing-cncf&limit=1' > "$TMPF"
+check "jaeger has traces"           python3 -c "
 import sys,json
-d=json.load(sys.stdin)
+with open('$TMPF') as f: d=json.load(f)
 assert len(d['data'])>0,'no traces'
 t=d['data'][0]
 assert len(t['spans'])>0,'no spans'
@@ -124,35 +145,44 @@ print(f'  traceID={t[\"traceID\"][:16]}..., spans={len(t[\"spans\"])}')
 
 echo ""
 echo "── Phase 6: Verify Grafana ──"
-check "grafana health"              curl -sf http://localhost:3000/api/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['database']=='ok'"
-
-check "grafana datasource prometheus"  curl -s http://localhost:3000/api/datasources | python3 -c "
+curl -sf http://localhost:3000/api/health > "$TMPF"
+check "grafana health"              python3 -c "
 import sys,json
-ds=json.load(sys.stdin)
+with open('$TMPF') as f: d=json.load(f)
+assert d['database']=='ok'
+"
+
+curl -s http://localhost:3000/api/datasources > "$TMPF"
+check "grafana datasource prometheus"  python3 -c "
+import sys,json
+with open('$TMPF') as f: ds=json.load(f)
 prom=[d for d in ds if d['name']=='Prometheus']
 assert len(prom)>0,'prometheus not found'
 assert prom[0]['uid']=='prometheus',f'uid={prom[0][\"uid\"]}'
 "
 
-check "grafana datasource jaeger"   curl -s http://localhost:3000/api/datasources | python3 -c "
+curl -s http://localhost:3000/api/datasources > "$TMPF"
+check "grafana datasource jaeger"   python3 -c "
 import sys,json
-ds=json.load(sys.stdin)
+with open('$TMPF') as f: ds=json.load(f)
 jaeger=[d for d in ds if d['name']=='Jaeger']
 assert len(jaeger)>0,'jaeger not found'
 assert jaeger[0]['uid']=='jaeger',f'uid={jaeger[0][\"uid\"]}'
 "
 
-check "grafana datasource loki"     curl -s http://localhost:3000/api/datasources | python3 -c "
+curl -s http://localhost:3000/api/datasources > "$TMPF"
+check "grafana datasource loki"     python3 -c "
 import sys,json
-ds=json.load(sys.stdin)
+with open('$TMPF') as f: ds=json.load(f)
 loki=[d for d in ds if d['name']=='Loki']
 assert len(loki)>0,'loki not found'
 assert loki[0]['uid']=='loki',f'uid={loki[0][\"uid\"]}'
 "
 
-check "grafana dashboard provisioned"  curl -s http://localhost:3000/api/search | python3 -c "
+curl -s http://localhost:3000/api/search > "$TMPF"
+check "grafana dashboard provisioned"  python3 -c "
 import sys,json
-items=json.load(sys.stdin)
+with open('$TMPF') as f: items=json.load(f)
 dbs=[i for i in items if i.get('type')=='dash-db']
 assert len(dbs)>0,'no dashboard'
 print(f'  dashboard: {dbs[0][\"title\"]} (uid={dbs[0][\"uid\"]})')
@@ -160,7 +190,8 @@ print(f'  dashboard: {dbs[0][\"title\"]} (uid={dbs[0][\"uid\"]})')
 
 echo ""
 echo "── Phase 7: Collector log check ──"
-check "collector no fatal errors"   podman logs otel-collector 2>&1 | rg -v "error|Error|ERROR|Fatal|panic|warn"
+podman logs otel-collector > "$TMPF" 2>&1
+check "collector no fatal errors"   rg -v "error|Error|ERROR|Fatal|panic|warn" "$TMPF"
 
 echo ""
 echo "============================================"

@@ -9,7 +9,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::metrics::SdkMeterProvider;
+use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -61,13 +61,17 @@ fn init_observability() -> SdkMeterProvider {
         .build()
         .expect("failed to create metric exporter");
 
+    let reader = PeriodicReader::builder(metric_exporter)
+        .with_interval(std::time::Duration::from_secs(5))
+        .build();
+
     let meter_provider = SdkMeterProvider::builder()
         .with_resource(
             opentelemetry_sdk::Resource::builder()
                 .with_service_name("learn-tracing-cncf")
                 .build(),
         )
-        .with_periodic_exporter(metric_exporter)
+        .with_reader(reader)
         .build();
 
     tracing_subscriber::registry()

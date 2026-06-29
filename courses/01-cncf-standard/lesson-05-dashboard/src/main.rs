@@ -11,7 +11,7 @@ use opentelemetry::{
 };
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{
-    metrics::SdkMeterProvider,
+    metrics::{PeriodicReader, SdkMeterProvider},
     propagation::TraceContextPropagator,
     trace::SdkTracerProvider,
 };
@@ -69,13 +69,17 @@ fn init_observability() -> SdkTracerProvider {
         .build()
         .expect("failed to create metric exporter");
 
+    let reader = PeriodicReader::builder(metric_exporter)
+        .with_interval(std::time::Duration::from_secs(5))
+        .build();
+
     let meter_provider = SdkMeterProvider::builder()
         .with_resource(
             opentelemetry_sdk::Resource::builder()
                 .with_service_name("learn-tracing-cncf")
                 .build(),
         )
-        .with_periodic_exporter(metric_exporter)
+        .with_reader(reader)
         .build();
 
     opentelemetry::global::set_meter_provider(meter_provider);
